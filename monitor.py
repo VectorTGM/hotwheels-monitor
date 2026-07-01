@@ -266,65 +266,81 @@ def parse_amazon_search(html: str) -> list:
     return results
 
 def search_amazon_hotwheels(config: dict, seen: dict) -> list:
-    """Search Amazon India for Hot Wheels cars by keyword."""
+    """Search Amazon India for Hot Wheels cars by keyword with 503 retry."""
     alerts = []
     max_above_mrp = config.get("amazon_max_price_above_mrp", 50)
     queries = config.get("amazon_search_queries", [])
     if not queries:
         return alerts
 
-    for query in queries:
-        search_url = f"https://www.amazon.in/s?k={requests.utils.quote(query)}"
-        logging.info(f"  Amazon search: {query}")
-        html = get_amazon_page(search_url)
-        if not html:
-            time.sleep(random.uniform(10, 20))
-            continue
+    failed_queries = list(queries)
 
-        products = parse_amazon_search(html)
-        for prod in products[:3]:
-            time.sleep(random.uniform(4, 8))
-            detail_html = get_amazon_page(prod["url"])
-            if not detail_html:
-                continue
-            data = parse_amazon_product(detail_html)
-            price = data["price"]
-            mrp = data["mrp"]
-            in_stock = data["in_stock"]
-            title = data.get("title", prod["title"])
-            series = prod.get("series", "silver")
+    for retry_round in range(3):
+        if not failed_queries:
+            break
+        if retry_round > 0:
+            logging.info(f"  [Retry round {retry_round + 1}/3 — {len(failed_queries)} queries]")
+            time.sleep(random.uniform(15, 30))
 
-            if price is None:
+        still_failed = []
+        for query in failed_queries:
+            search_url = f"https://www.amazon.in/s?k={requests.utils.quote(query)}"
+            logging.info(f"  Amazon search: {query}")
+            html = get_amazon_page(search_url)
+            if not html:
+                still_failed.append(query)
+                time.sleep(random.uniform(5, 10))
                 continue
 
-            logging.info(f"    [{series.upper()}] {title[:50]}: ₹{price}, MRP: ₹{mrp}")
+            products = parse_amazon_search(html)
+            for prod in products[:3]:
+                time.sleep(random.uniform(4, 8))
+                detail_html = get_amazon_page(prod["url"])
+                if not detail_html:
+                    continue
+                data = parse_amazon_product(detail_html)
+                price = data["price"]
+                mrp = data["mrp"]
+                in_stock = data["in_stock"]
+                title = data.get("title", prod["title"])
+                series = prod.get("series", "silver")
 
-            is_deal = False
-            deal_reason = ""
-            series_max = 800 if series == "premium" else 350
+                if price is None:
+                    continue
 
-            if price <= series_max:
-                if mrp and price <= mrp + max_above_mrp:
-                    is_deal = True
-                    deal_reason = f"At/near MRP ₹{mrp} ({series})"
-                elif price <= series_max:
-                    is_deal = True
-                    deal_reason = f"Under ₹{series_max} ({series})"
+                logging.info(f"    [{series.upper()}] {title[:50]}: ₹{price}, MRP: ₹{mrp}")
 
-            if is_deal and in_stock:
-                dk = deal_key("amazon", prod["url"], price)
-                if dk not in seen:
-                    seen[dk] = datetime.now().isoformat()
-                    alerts.append({
-                        "platform": "Amazon",
-                        "name": title,
-                        "price": price,
-                        "mrp": mrp,
-                        "url": prod["url"],
-                        "reason": deal_reason,
-                    })
+                is_deal = False
+                deal_reason = ""
+                series_max = 800 if series == "premium" else 350
 
-        time.sleep(random.uniform(8, 15))
+                if price <= series_max:
+                    if mrp and price <= mrp + max_above_mrp:
+                        is_deal = True
+                        deal_reason = f"At/near MRP ₹{mrp} ({series})"
+                    elif price <= series_max:
+                        is_deal = True
+                        deal_reason = f"Under ₹{series_max} ({series})"
+
+                if is_deal and in_stock:
+                    dk = deal_key("amazon", prod["url"], price)
+                    if dk not in seen:
+                        seen[dk] = datetime.now().isoformat()
+                        alerts.append({
+                            "platform": "Amazon",
+                            "name": title,
+                            "price": price,
+                            "mrp": mrp,
+                            "url": prod["url"],
+                            "reason": deal_reason,
+                        })
+
+            time.sleep(random.uniform(8, 15))
+
+        failed_queries = still_failed
+
+    if failed_queries:
+        logging.warning(f"  {len(failed_queries)} queries failed after 3 retries: {failed_queries}")
 
     return alerts
 
