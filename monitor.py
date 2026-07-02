@@ -23,9 +23,10 @@ from bs4 import BeautifulSoup
 CONFIG_PATH = Path(__file__).parent / "config.json"
 SEEN_FILE = Path(__file__).parent / "seen_deals.json"
 
+IMPERSONATE_LIST = ["chrome120", "chrome110", "chrome107", "safari15_5", "edge99"]
+
 HEADERS_LIST = [
     {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
         "Accept-Language": "en-IN,en;q=0.9",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
         "Accept-Encoding": "gzip, deflate, br",
@@ -38,36 +39,51 @@ HEADERS_LIST = [
         "Cache-Control": "max-age=0",
     },
     {
-        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
         "Accept-Language": "en-IN,en;q=0.9",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Encoding": "gzip, deflate, br",
         "Connection": "keep-alive",
-    },
-    {
-        "User-Agent": "Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36",
-        "Accept-Language": "en-IN,en;q=0.9",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Connection": "keep-alive",
-    },
-    {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
-        "Accept-Language": "en-IN,en;q=0.9",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Connection": "keep-alive",
-    },
-    {
-        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0",
-        "Accept-Language": "en-IN,en;q=0.5",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "same-origin",
+        "Cache-Control": "max-age=0",
     },
 ]
 
-amazon_session = cffi_requests.Session(impersonate="chrome120")
+FREE_PROXY_URLS = [
+    "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt",
+    "https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/https.txt",
+    "https://raw.githubusercontent.com/mmpx12/proxy-list/master/https.txt",
+]
+
+proxy_pool: list = []
+
+def fetch_free_proxies() -> list:
+    """Fetch free proxies from public lists."""
+    proxies = []
+    for url in FREE_PROXY_URLS:
+        try:
+            r = requests.get(url, timeout=10)
+            if r.status_code == 200:
+                lines = [l.strip() for l in r.text.strip().split("\n") if l.strip()]
+                for line in lines:
+                    if ":" in line:
+                        proxy = line if line.startswith("http") else f"http://{line}"
+                        proxies.append(proxy)
+            logging.info(f"  Fetched {len(lines)} proxies from {url.split('/')[-1]}")
+        except Exception as e:
+            logging.warning(f"  Proxy fetch failed from {url.split('/')[-1]}: {e}")
+    random.shuffle(proxies)
+    return proxies
+
+def get_proxy() -> Optional[dict]:
+    """Get a random proxy from the pool."""
+    global proxy_pool
+    if not proxy_pool:
+        return None
+    proxy = random.choice(proxy_pool)
+    return {"http": proxy, "https": proxy}
 
 def setup_logging(log_file: str):
     import io
@@ -163,24 +179,40 @@ def is_premium_or_silver(title: str, price: float) -> str:
         return "silver"
     return "mainline"
 
-def get_amazon_page(url: str, retries: int = 3) -> Optional[str]:
+def get_amazon_page(url: str, retries: int = 5) -> Optional[str]:
+    """Fetch Amazon page with rotating impersonation, proxies, and exponential backoff."""
     for attempt in range(retries):
-        headers = random.choice(HEADERS_LIST)
+        impersonate = random.choice(IMPERSONATE_LIST)
+        headers = random.choice(HEADERS_LIST).copy()
+        proxy = get_proxy()
+        proxy_str = f" via {proxy['https'].split('//')[1][:20]}" if proxy else " direct"
         try:
-            r = amazon_session.get(url, headers=headers, timeout=20, allow_redirects=True)
+            session = cffi_requests.Session(impersonate=impersonate)
+            r = session.get(url, headers=headers, proxies=proxy, timeout=25, allow_redirects=True)
             if r.status_code == 503:
-                wait = (attempt + 1) * random.uniform(8, 15)
-                logging.warning(f"    503 blocked, waiting {wait:.0f}s (attempt {attempt+1}/{retries})")
+                wait = (2 ** attempt) * random.uniform(10, 20)
+                logging.warning(f"    503 ({impersonate}{proxy_str}), waiting {wait:.0f}s (attempt {attempt+1}/{retries})")
                 time.sleep(wait)
+                if proxy and proxy in proxy_pool:
+                    proxy_pool.remove(proxy["https"])
                 continue
-            if r.status_code == 503:
-                logging.error(f"Amazon 503 after {retries} retries: {url}")
-                return None
-            r.raise_for_status()
+            if r.status_code == 429:
+                wait = (2 ** attempt) * random.uniform(15, 30)
+                logging.warning(f"    429 rate-limit ({impersonate}{proxy_str}), waiting {wait:.0f}s")
+                time.sleep(wait)
+                if proxy and proxy in proxy_pool:
+                    proxy_pool.remove(proxy["https"])
+                continue
+            if r.status_code != 200:
+                logging.warning(f"    HTTP {r.status_code} ({impersonate}{proxy_str}) for {url[:80]}")
+                time.sleep(random.uniform(3, 7))
+                continue
             return r.text
         except Exception as e:
+            if proxy and proxy in proxy_pool:
+                proxy_pool.remove(proxy["https"])
             if attempt < retries - 1:
-                time.sleep(random.uniform(5, 10))
+                time.sleep(random.uniform(5, 12))
             else:
                 logging.error(f"Amazon fetch error: {e}")
     return None
@@ -195,7 +227,7 @@ def parse_amazon_product(html: str) -> dict:
 
     price_el = soup.select_one(".a-price .a-offscreen")
     if price_el:
-        raw = price_el.get_text(strip=True).replace("₹", "").replace(",", "").strip()
+        raw = price_el.get_text(strip=True).replace("\u20b9", "").replace(",", "").strip()
         try:
             result["price"] = float(raw)
         except ValueError:
@@ -203,7 +235,7 @@ def parse_amazon_product(html: str) -> dict:
 
     mrp_el = soup.select_one("#priceblock_ourprice, #priceblock_dealprice, .a-price.a-text-price .a-offscreen")
     if mrp_el:
-        raw = mrp_el.get_text(strip=True).replace("₹", "").replace(",", "").strip()
+        raw = mrp_el.get_text(strip=True).replace("\u20b9", "").replace(",", "").strip()
         try:
             result["mrp"] = float(raw)
         except ValueError:
@@ -216,7 +248,7 @@ def parse_amazon_product(html: str) -> dict:
             if parent and "M.R.P" in parent.get_text():
                 offscreen = span.select_one(".a-offscreen")
                 if offscreen:
-                    raw = offscreen.get_text(strip=True).replace("₹", "").replace(",", "").strip()
+                    raw = offscreen.get_text(strip=True).replace("\u20b9", "").replace(",", "").strip()
                     try:
                         result["mrp"] = float(raw)
                     except ValueError:
@@ -250,7 +282,7 @@ def parse_amazon_search(html: str) -> list:
         price_el = card.select_one(".a-price .a-offscreen")
         if not price_el:
             continue
-        raw = price_el.get_text(strip=True).replace("₹", "").replace(",", "").strip()
+        raw = price_el.get_text(strip=True).replace("\u20b9", "").replace(",", "").strip()
         try:
             price = float(raw)
         except ValueError:
@@ -295,7 +327,7 @@ def search_amazon_hotwheels(config: dict, seen: dict) -> list:
             if price is None:
                 continue
 
-            logging.info(f"    [{series.upper()}] {title[:50]}: {chr(8377)}{price}, MRP: {chr(8377)}{mrp}")
+            logging.info(f"    [{series.upper()}] {title[:50]}: \u20b9{price}, MRP: \u20b9{mrp}")
 
             is_deal = False
             deal_reason = ""
@@ -304,10 +336,10 @@ def search_amazon_hotwheels(config: dict, seen: dict) -> list:
             if price <= series_max:
                 if mrp and price <= mrp + max_above_mrp:
                     is_deal = True
-                    deal_reason = f"At/near MRP {chr(8377)}{mrp} ({series})"
+                    deal_reason = f"At/near MRP \u20b9{mrp} ({series})"
                 elif price <= series_max:
                     is_deal = True
-                    deal_reason = f"Under {chr(8377)}{series_max} ({series})"
+                    deal_reason = f"Under \u20b9{series_max} ({series})"
 
             if is_deal and in_stock:
                 dk = deal_key("amazon", prod["url"], price)
@@ -350,7 +382,7 @@ def check_amazon_products(config: dict, seen: dict) -> list:
             logging.warning(f"    Could not parse price")
             continue
 
-        logging.info(f"    Price: {chr(8377)}{price}, MRP: {chr(8377)}{mrp}, Stock: {in_stock}")
+        logging.info(f"    Price: \u20b9{price}, MRP: \u20b9{mrp}, Stock: {in_stock}")
 
         is_deal = False
         deal_reason = ""
@@ -360,10 +392,10 @@ def check_amazon_products(config: dict, seen: dict) -> list:
         elif mrp and price <= mrp + max_above_mrp:
             if not product.get("ignore_near_mrp", False):
                 is_deal = True
-                deal_reason = f"At/near MRP {chr(8377)}{mrp}"
+                deal_reason = f"At/near MRP \u20b9{mrp}"
         elif price <= max_price:
             is_deal = True
-            deal_reason = f"Under {chr(8377)}{max_price}"
+            deal_reason = f"Under \u20b9{max_price}"
 
         if is_deal and in_stock:
             dk = deal_key("amazon", url, price)
@@ -597,7 +629,7 @@ def check_shopify_sites(config: dict, seen: dict) -> list:
             time.sleep(1)
 
         if not found:
-            logging.info(f"    No deals under {chr(8377)}{max_price} from search, trying full catalog...")
+            logging.info(f"    No deals under \u20b9{max_price} from search, trying full catalog...")
             found = shopify_fetch_products(site, max_price, seen)
 
         for item in found:
@@ -610,13 +642,13 @@ def check_shopify_sites(config: dict, seen: dict) -> list:
                     "price": item["price"],
                     "mrp": None,
                     "url": item["url"],
-                    "reason": f"Under {chr(8377)}{max_price} on {site_name}",
+                    "reason": f"Under \u20b9{max_price} on {site_name}",
                 })
 
         if alerts:
             logging.info(f"    Found {len(alerts)} deals on {site_name}")
         else:
-            logging.info(f"    No new deals under {chr(8377)}{max_price}")
+            logging.info(f"    No new deals under \u20b9{max_price}")
 
     return alerts
 
@@ -633,9 +665,9 @@ def format_alert(alert: dict) -> str:
     lines = [f" Hotwheels Deal Found!"]
     lines.append(f"")
     lines.append(f" {platform}: {name}")
-    lines.append(f" Price: {chr(8377)}{price:.0f}")
+    lines.append(f" Price: \u20b9{price:.0f}")
     if mrp:
-        lines.append(f" MRP: {chr(8377)}{mrp:.0f}")
+        lines.append(f" MRP: \u20b9{mrp:.0f}")
     lines.append(f" {reason}")
     lines.append(f"")
     lines.append(f" {url}")
@@ -693,6 +725,11 @@ def main():
     logging.info(f"Amazon products: {len(config.get('amazon_products', []))}")
     logging.info(f"Shopify sites: {len(config.get('shopify_sites', []))}")
     logging.info("=" * 60)
+
+    global proxy_pool
+    logging.info("Fetching free proxies...")
+    proxy_pool = fetch_free_proxies()
+    logging.info(f"Proxy pool: {len(proxy_pool)} proxies loaded")
 
     seen = load_seen()
     interval = config.get("check_interval_minutes", 5) * 60
