@@ -24,10 +24,56 @@ SEEN_FILE = Path(__file__).parent / "seen_deals.json"
 
 HEADERS_LIST = [
     {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Accept-Language": "en-IN,en;q=0.9,hi;q=0.8",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Sec-CH-UA": '"Chromium";v="131", "Not_A Brand";v="24"',
+        "Sec-CH-UA-Mobile": "?0",
+        "Sec-CH-UA-Platform": '"Windows"',
+        "Cache-Control": "max-age=0",
+        "DNT": "1",
+    },
+    {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
         "Accept-Language": "en-IN,en;q=0.9",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Accept-Encoding": "gzip, deflate, br",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "same-origin",
+        "Sec-Fetch-User": "?1",
+        "Cache-Control": "max-age=0",
+    },
+    {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Accept-Language": "en-IN,en;q=0.9",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Sec-CH-UA": '"Chromium";v="131", "Not_A Brand";v="24"',
+        "Sec-CH-UA-Mobile": "?0",
+        "Sec-CH-UA-Platform": '"macOS"',
+        "Cache-Control": "max-age=0",
+    },
+    {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
+        "Accept-Language": "en-IN,en;q=0.8",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
         "Connection": "keep-alive",
         "Upgrade-Insecure-Requests": "1",
         "Sec-Fetch-Dest": "document",
@@ -37,36 +83,35 @@ HEADERS_LIST = [
         "Cache-Control": "max-age=0",
     },
     {
-        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
         "Accept-Language": "en-IN,en;q=0.9",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Encoding": "gzip, deflate, br",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Encoding": "gzip, deflate, br, zstd",
         "Connection": "keep-alive",
-    },
-    {
-        "User-Agent": "Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Mobile Safari/537.36",
-        "Accept-Language": "en-IN,en;q=0.9",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Connection": "keep-alive",
-    },
-    {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
-        "Accept-Language": "en-IN,en;q=0.9",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Connection": "keep-alive",
-    },
-    {
-        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0",
-        "Accept-Language": "en-IN,en;q=0.5",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Sec-Fetch-User": "?1",
+        "Sec-CH-UA": '"Chromium";v="131", "Not_A Brand";v="24"',
+        "Sec-CH-UA-Mobile": "?0",
+        "Sec-CH-UA-Platform": '"Linux"',
+        "Cache-Control": "max-age=0",
     },
 ]
 
 amazon_session = requests.Session()
+
+def warm_up_session():
+    """Visit Amazon homepage first to get valid cookies."""
+    try:
+        headers = random.choice(HEADERS_LIST).copy()
+        headers["Referer"] = "https://www.google.co.in/"
+        r = amazon_session.get("https://www.amazon.in/", headers=headers, timeout=20)
+        logging.info(f"Session warm-up: {r.status_code}")
+        time.sleep(random.uniform(3, 6))
+    except Exception as e:
+        logging.warning(f"Warm-up failed: {e}")
 
 def setup_logging(log_file: str):
     import io
@@ -163,24 +208,30 @@ def is_premium_or_silver(title: str, price: float) -> str:
         return "silver"
     return "mainline"
 
-def get_amazon_page(url: str, retries: int = 3) -> Optional[str]:
+def get_amazon_page(url: str, retries: int = 5) -> Optional[str]:
     for attempt in range(retries):
-        headers = random.choice(HEADERS_LIST)
+        headers = random.choice(HEADERS_LIST).copy()
+        headers["Referer"] = "https://www.amazon.in/"
         try:
-            r = amazon_session.get(url, headers=headers, timeout=20, allow_redirects=True)
+            r = amazon_session.get(url, headers=headers, timeout=25, allow_redirects=True)
             if r.status_code == 503:
-                wait = (attempt + 1) * random.uniform(5, 10)
+                wait = (2 ** attempt) * random.uniform(10, 20)
                 logging.warning(f"    503 blocked, waiting {wait:.0f}s (attempt {attempt+1}/{retries})")
                 time.sleep(wait)
                 continue
-            if r.status_code == 503:
-                logging.error(f"Amazon 503 after {retries} retries: {url}")
-                return None
-            r.raise_for_status()
+            if r.status_code == 429:
+                wait = (2 ** attempt) * random.uniform(15, 30)
+                logging.warning(f"    429 rate-limited, waiting {wait:.0f}s (attempt {attempt+1}/{retries})")
+                time.sleep(wait)
+                continue
+            if r.status_code != 200:
+                logging.warning(f"    HTTP {r.status_code} for {url[:80]}")
+                time.sleep(random.uniform(5, 10))
+                continue
             return r.text
         except Exception as e:
             if attempt < retries - 1:
-                time.sleep(random.uniform(3, 7))
+                time.sleep(random.uniform(5, 12))
             else:
                 logging.error(f"Amazon fetch error: {e}")
     return None
@@ -273,6 +324,8 @@ def search_amazon_hotwheels(config: dict, seen: dict) -> list:
     if not queries:
         return alerts
 
+    warm_up_session()
+
     failed_queries = list(queries)
 
     for retry_round in range(3):
@@ -280,7 +333,8 @@ def search_amazon_hotwheels(config: dict, seen: dict) -> list:
             break
         if retry_round > 0:
             logging.info(f"  [Retry round {retry_round + 1}/3 — {len(failed_queries)} queries]")
-            time.sleep(random.uniform(15, 30))
+            warm_up_session()
+            time.sleep(random.uniform(20, 40))
 
         still_failed = []
         for query in failed_queries:
@@ -335,7 +389,7 @@ def search_amazon_hotwheels(config: dict, seen: dict) -> list:
                             "reason": deal_reason,
                         })
 
-            time.sleep(random.uniform(8, 15))
+            time.sleep(random.uniform(15, 25))
 
         failed_queries = still_failed
 
@@ -396,7 +450,7 @@ def check_amazon_products(config: dict, seen: dict) -> list:
                     "reason": deal_reason,
                 })
 
-        time.sleep(random.uniform(4, 8))
+        time.sleep(random.uniform(10, 18))
 
     return alerts
 
@@ -670,6 +724,7 @@ def run_check(config: dict, seen: dict) -> int:
     alerts = []
 
     logging.info("  [Amazon - Direct Products]")
+    warm_up_session()
     try:
         amazon_alerts = check_amazon_products(config, seen)
         alerts.extend(amazon_alerts)
