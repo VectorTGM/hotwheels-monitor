@@ -33,6 +33,21 @@
       "url": "https://www.amazon.in/dp/B0FLF5DD53",
       "name": "Hot Wheels Eurospeed Car Culture Premium",
       "max_price": 600
+    },
+    {
+      "url": "https://www.amazon.in/dp/B0GX9V7KVN",
+      "name": "Hot Wheels Car (B0ihsbA3g)",
+      "max_price": 299
+    },
+    {
+      "url": "https://www.amazon.in/dp/B0GVN66QR3",
+      "name": "Hot Wheels Car (B0aB3Znov)",
+      "max_price": 549
+    },
+    {
+      "url": "https://www.amazon.in/dp/B0GVN1GGNP",
+      "name": "Hot Wheels Car (B0737gntr)",
+      "max_price": 549
     }
   ],
   "shopify_sites": [],
