@@ -1,7 +1,7 @@
 {
   "telegram_bot_token": "8670341641:AAEoR3EM2UkWg_w2DUK6cPREEXA-ZnJlOO4",
   "telegram_chat_id": "5289871171",
-  "check_interval_minutes": 5,
+  "check_interval_minutes": 10,
   "amazon_max_price_above_mrp": 50,
   "amazon_products": [
     {
