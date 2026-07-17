@@ -180,37 +180,29 @@ def is_premium_or_silver(title: str, price: float) -> str:
     return "mainline"
 
 def get_amazon_page(url: str, retries: int = 5) -> Optional[str]:
-    """Fetch Amazon page with rotating impersonation, proxies, and exponential backoff."""
+    """Fetch Amazon page with rotating TLS impersonation and exponential backoff."""
     for attempt in range(retries):
         impersonate = random.choice(IMPERSONATE_LIST)
         headers = random.choice(HEADERS_LIST).copy()
-        proxy = get_proxy()
-        proxy_str = f" via {proxy['https'].split('//')[1][:20]}" if proxy else " direct"
         try:
             session = cffi_requests.Session(impersonate=impersonate)
-            r = session.get(url, headers=headers, proxies=proxy, timeout=25, allow_redirects=True)
+            r = session.get(url, headers=headers, timeout=25, allow_redirects=True)
             if r.status_code == 503:
                 wait = (2 ** attempt) * random.uniform(10, 20)
-                logging.warning(f"    503 ({impersonate}{proxy_str}), waiting {wait:.0f}s (attempt {attempt+1}/{retries})")
+                logging.warning(f"    503 ({impersonate}), waiting {wait:.0f}s (attempt {attempt+1}/{retries})")
                 time.sleep(wait)
-                if proxy and proxy in proxy_pool:
-                    proxy_pool.remove(proxy["https"])
                 continue
             if r.status_code == 429:
                 wait = (2 ** attempt) * random.uniform(15, 30)
-                logging.warning(f"    429 rate-limit ({impersonate}{proxy_str}), waiting {wait:.0f}s")
+                logging.warning(f"    429 rate-limit ({impersonate}), waiting {wait:.0f}s")
                 time.sleep(wait)
-                if proxy and proxy in proxy_pool:
-                    proxy_pool.remove(proxy["https"])
                 continue
             if r.status_code != 200:
-                logging.warning(f"    HTTP {r.status_code} ({impersonate}{proxy_str}) for {url[:80]}")
+                logging.warning(f"    HTTP {r.status_code} ({impersonate}) for {url[:80]}")
                 time.sleep(random.uniform(3, 7))
                 continue
             return r.text
         except Exception as e:
-            if proxy and proxy in proxy_pool:
-                proxy_pool.remove(proxy["https"])
             if attempt < retries - 1:
                 time.sleep(random.uniform(5, 12))
             else:
@@ -1026,11 +1018,6 @@ def main():
     logging.info(f"Amazon products: {len(config.get('amazon_products', []))}")
     logging.info(f"Shopify sites: {len(config.get('shopify_sites', []))}")
     logging.info("=" * 60)
-
-    global proxy_pool
-    logging.info("Fetching free proxies...")
-    proxy_pool = fetch_free_proxies()
-    logging.info(f"Proxy pool: {len(proxy_pool)} proxies loaded")
 
     seen = load_seen()
     interval = config.get("check_interval_minutes", 5) * 60
