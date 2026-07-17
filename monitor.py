@@ -414,6 +414,293 @@ def check_amazon_products(config: dict, seen: dict) -> list:
 
     return alerts
 
+# --- FirstCry Scraper ------------------------------------------------------
+
+FIRSTCRY_EXCLUDE = ["monster truck", "mainline", "5-pack", "5 pack", "multipack",
+                     "matchbox", "majorette", "tomica", "track set", "track creator",
+                     "color shifters", "wall track", "hot wheels id", "gift pack",
+                     "stunt pack", "motor show pack", "20 pack"]
+
+def parse_firstcry_products(html: str, query: str) -> list:
+    """Parse FirstCry search results HTML."""
+    soup = BeautifulSoup(html, "html.parser")
+    results = []
+
+    product_cards = soup.select(".product-card, .prod-item, [data-product-id], .product-listing .product-item, .search-product-item")
+    if not product_cards:
+        product_cards = soup.select("li.product, div.product, .plp-card")
+
+    for card in product_cards:
+        title_el = card.select_one(".product-name, .prod-name, h3, h2, .product-title, a[title]")
+        if not title_el:
+            continue
+        title = title_el.get_text(strip=True) or title_el.get("title", "")
+        if not title:
+            continue
+
+        title_lower = title.lower()
+        if "hot wheels" not in title_lower and "hotwheels" not in title_lower:
+            continue
+        if any(kw in title_lower for kw in FIRSTCRY_EXCLUDE):
+            continue
+
+        price = None
+        mrp = None
+
+        price_el = card.select_one(".new-price, .selling-price, .price-new, .offer-price, .product-price")
+        if price_el:
+            raw = price_el.get_text(strip=True).replace("Rs.", "").replace("₹", "").replace(",", "").strip()
+            try:
+                price = float(raw)
+            except ValueError:
+                pass
+
+        if price is None:
+            all_prices = card.select(".price, .product-price span, .amt")
+            for p in all_prices:
+                raw = p.get_text(strip=True).replace("Rs.", "").replace("₹", "").replace(",", "").strip()
+                try:
+                    val = float(raw)
+                    if price is None or val < price:
+                        price = val
+                except ValueError:
+                    pass
+
+        mrp_el = card.select_one(".old-price, .mrp, .price-old, .original-price, .list-price")
+        if mrp_el:
+            raw = mrp_el.get_text(strip=True).replace("Rs.", "").replace("₹", "").replace(",", "").strip()
+            try:
+                mrp = float(raw)
+            except ValueError:
+                pass
+
+        if price is None:
+            continue
+
+        in_stock = True
+        out_of_stock_el = card.select_one(".out-of-stock, .sold-out, .oos")
+        if out_of_stock_el:
+            in_stock = False
+        add_to_cart = card.select_one(".add-to-cart, .atc-btn, button[data-action='add-to-cart']")
+        if not out_of_stock_el and not add_to_cart:
+            if price and price > 500:
+                pass
+
+        link_el = card.select_one("a[href*='/']", )
+        url = ""
+        if link_el:
+            href = link_el.get("href", "")
+            if href.startswith("/"):
+                url = f"https://www.firstcry.com{href}"
+            elif href.startswith("http"):
+                url = href
+
+        results.append({
+            "title": title,
+            "price": price,
+            "mrp": mrp,
+            "url": url,
+            "in_stock": in_stock,
+            "query": query,
+        })
+
+    return results
+
+def search_firstcry(config: dict, seen: dict) -> list:
+    """Search FirstCry for Hot Wheels by name."""
+    alerts = []
+    pincode = config.get("firstcry_pincode", "400101")
+    queries = config.get("firstcry_search_queries", [])
+    max_above_mrp = config.get("amazon_max_price_above_mrp", 50)
+
+    if not queries:
+        return alerts
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-IN,en;q=0.9",
+    }
+
+    for query in queries:
+        search_url = f"https://www.firstcry.com/search?q={requests.utils.quote(query)}&pincode={pincode}"
+        logging.info(f"  FirstCry search: {query}")
+        try:
+            r = requests.get(search_url, headers=headers, timeout=20)
+            if r.status_code != 200:
+                logging.warning(f"    FirstCry HTTP {r.status_code}")
+                time.sleep(random.uniform(5, 10))
+                continue
+            products = parse_firstcry_products(r.text, query)
+            for prod in products[:3]:
+                title = prod["title"]
+                price = prod["price"]
+                mrp = prod["mrp"]
+                in_stock = prod["in_stock"]
+                url = prod["url"]
+
+                if not in_stock:
+                    continue
+
+                series = is_premium_or_silver(title, price)
+                if series == "mainline":
+                    continue
+
+                series_max = 800 if series == "premium" else 350
+                is_deal = False
+                deal_reason = ""
+
+                if price <= series_max:
+                    if mrp and price <= mrp + max_above_mrp:
+                        is_deal = True
+                        deal_reason = f"At/near MRP \u20b9{mrp} ({series}, FirstCry)"
+                    elif price <= series_max:
+                        is_deal = True
+                        deal_reason = f"Under \u20b9{series_max} ({series}, FirstCry)"
+
+                if is_deal:
+                    dk = deal_key("firstcry", url or title, price)
+                    if dk not in seen:
+                        seen[dk] = datetime.now().isoformat()
+                        alerts.append({
+                            "platform": "FirstCry",
+                            "name": title,
+                            "price": price,
+                            "mrp": mrp,
+                            "url": url or search_url,
+                            "reason": deal_reason,
+                        })
+
+        except Exception as e:
+            logging.error(f"    FirstCry error: {e}")
+
+        time.sleep(random.uniform(5, 10))
+
+    return alerts
+
+# --- Crossword Scraper (Shopify JSON API) ----------------------------------
+
+CROSSWORD_EXCLUDE = ["monster truck", "mainline", "5-pack", "5 pack", "multipack",
+                      "matchbox", "majorette", "tomica", "track set", "track creator",
+                      "color shifters", "wall track", "hot wheels id", "gift pack",
+                      "stunt pack", "motor show pack", "20 pack"]
+
+def search_crossword(config: dict, seen: dict) -> list:
+    """Search Crossword for Hot Wheels using Shopify JSON API."""
+    alerts = []
+    queries = config.get("crossword_search_queries", [])
+    max_above_mrp = config.get("amazon_max_price_above_mrp", 50)
+
+    if not queries:
+        return alerts
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": "application/json",
+    }
+
+    for query in queries:
+        search_url = f"https://www.crossword.in/search?q={requests.utils.quote(query)}"
+        logging.info(f"  Crossword search: {query}")
+        try:
+            r = requests.get(search_url, headers=headers, timeout=20)
+            if r.status_code != 200:
+                logging.warning(f"    Crossword HTTP {r.status_code}")
+                time.sleep(random.uniform(5, 10))
+                continue
+
+            soup = BeautifulSoup(r.text, "html.parser")
+            product_cards = soup.select(".product-card, .grid-product, .product-item, [data-product-id]")
+
+            for card in product_cards[:3]:
+                title_el = card.select_one(".product-card__title, .product-title, h3, h2, a[title]")
+                if not title_el:
+                    continue
+                title = title_el.get_text(strip=True) or title_el.get("title", "")
+                if not title:
+                    continue
+
+                title_lower = title.lower()
+                if "hot wheels" not in title_lower and "hotwheels" not in title_lower:
+                    continue
+                if any(kw in title_lower for kw in CROSSWORD_EXCLUDE):
+                    continue
+
+                price = None
+                mrp = None
+
+                price_el = card.select_one(".product-card__price--current, .price--current, .price, .selling-price")
+                if price_el:
+                    raw = price_el.get_text(strip=True).replace("Rs.", "").replace("₹", "").replace(",", "").strip()
+                    try:
+                        price = float(raw)
+                    except ValueError:
+                        pass
+
+                mrp_el = card.select_one(".product-card__price--compare, .price--compare, .compare-price, .original-price")
+                if mrp_el:
+                    raw = mrp_el.get_text(strip=True).replace("Rs.", "").replace("₹", "").replace(",", "").strip()
+                    try:
+                        mrp = float(raw)
+                    except ValueError:
+                        pass
+
+                if price is None:
+                    continue
+
+                in_stock = True
+                oos = card.select_one(".sold-out, .out-of-stock, .unavailable")
+                if oos:
+                    in_stock = False
+
+                link_el = card.select_one("a[href]")
+                url = ""
+                if link_el:
+                    href = link_el.get("href", "")
+                    if href.startswith("/"):
+                        url = f"https://www.crossword.in{href}"
+                    elif href.startswith("http"):
+                        url = href
+
+                if not in_stock:
+                    continue
+
+                series = is_premium_or_silver(title, price)
+                if series == "mainline":
+                    continue
+
+                series_max = 800 if series == "premium" else 350
+                is_deal = False
+                deal_reason = ""
+
+                if price <= series_max:
+                    if mrp and price <= mrp + max_above_mrp:
+                        is_deal = True
+                        deal_reason = f"At/near MRP \u20b9{mrp} ({series}, Crossword)"
+                    elif price <= series_max:
+                        is_deal = True
+                        deal_reason = f"Under \u20b9{series_max} ({series}, Crossword)"
+
+                if is_deal:
+                    dk = deal_key("crossword", url or title, price)
+                    if dk not in seen:
+                        seen[dk] = datetime.now().isoformat()
+                        alerts.append({
+                            "platform": "Crossword",
+                            "name": title,
+                            "price": price,
+                            "mrp": mrp,
+                            "url": url or search_url,
+                            "reason": deal_reason,
+                        })
+
+        except Exception as e:
+            logging.error(f"    Crossword error: {e}")
+
+        time.sleep(random.uniform(5, 10))
+
+    return alerts
+
 # --- Shopify Multi-Site Gateway --------------------------------------------
 
 EXCLUDED_BRANDS = ["matchbox", "majorette", "tomica", "hot wheels id", "disney", "marvel", "star wars"]
@@ -698,6 +985,20 @@ def run_check(config: dict, seen: dict) -> int:
         alerts.extend(shopify_alerts)
     except Exception as e:
         logging.error(f"Shopify check failed: {e}")
+
+    logging.info("  [FirstCry]")
+    try:
+        firstcry_alerts = search_firstcry(config, seen)
+        alerts.extend(firstcry_alerts)
+    except Exception as e:
+        logging.error(f"FirstCry check failed: {e}")
+
+    logging.info("  [Crossword]")
+    try:
+        crossword_alerts = search_crossword(config, seen)
+        alerts.extend(crossword_alerts)
+    except Exception as e:
+        logging.error(f"Crossword check failed: {e}")
 
     token = config.get("telegram_bot_token", "")
     chat_id = config.get("telegram_chat_id", "")
