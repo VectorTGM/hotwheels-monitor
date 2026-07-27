@@ -160,7 +160,7 @@ def amazon_get(url: str, retries: int = 3) -> Optional[str]:
             body = r.text
             if "captcha" in body.lower() and "#productTitle" not in body:
                 logging.warning(f"    CAPTCHA ({impersonate})")
-                time.sleep(random.uniform(8, 15))
+                time.sleep(random.uniform(15, 30))
                 continue
             return body
         except Exception as e:
@@ -269,7 +269,7 @@ def search_amazon_hotwheels(config: dict, seen: dict) -> list:
 
         if found_any:
             logging.info(f"    Found deals in '{query}'")
-        time.sleep(random.uniform(12, 20))
+        time.sleep(random.uniform(20, 35))
 
     return alerts
 
