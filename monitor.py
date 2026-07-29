@@ -141,8 +141,8 @@ def send_telegram(token: str, chat_id: str, message: str):
 
 # --- Amazon India Scraper ---------------------------------------------------
 
-def amazon_get(url: str, retries: int = 3) -> Optional[str]:
-    """Fetch Amazon page with rotating TLS impersonation."""
+def amazon_get(url: str, retries: int = 5) -> Optional[str]:
+    """Fetch Amazon page with rotating TLS impersonation and CAPTCHA handling."""
     for attempt in range(retries):
         impersonate = random.choice(IMPERSONATE_LIST)
         headers = random.choice(HEADERS_LIST).copy()
@@ -158,9 +158,23 @@ def amazon_get(url: str, retries: int = 3) -> Optional[str]:
                 time.sleep(random.uniform(3, 7))
                 continue
             body = r.text
-            if "captcha" in body.lower() and "#productTitle" not in body:
-                logging.warning(f"    CAPTCHA ({impersonate})")
-                time.sleep(random.uniform(15, 30))
+            body_lower = body.lower()
+            is_captcha = (
+                "captcha" in body_lower
+                or "robot" in body_lower
+                or "automated access" in body_lower
+                or "please verify" in body_lower
+                or "are you a robot" in body_lower
+                or "sorry, we just need to make sure" in body_lower
+            )
+            has_product = "#producttitle" in body_lower or "producttitle" in body_lower
+            if is_captcha and not has_product:
+                logging.warning(f"    CAPTCHA ({impersonate}), waiting {30 + attempt * 10}s")
+                time.sleep(30 + attempt * 10)
+                continue
+            if len(body) < 3000 and not has_product:
+                logging.warning(f"    Short page ({len(body)} chars), retrying...")
+                time.sleep(random.uniform(10, 20))
                 continue
             return body
         except Exception as e:
@@ -284,7 +298,7 @@ def check_amazon_products(config: dict, seen: dict) -> list:
         max_price = product.get("max_price", 999999)
 
         logging.info(f"  Amazon: {name}")
-        time.sleep(random.uniform(5, 10))
+        time.sleep(random.uniform(15, 25))
         html = amazon_get(url)
         if not html:
             continue
