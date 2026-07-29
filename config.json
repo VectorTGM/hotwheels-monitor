@@ -68,25 +68,9 @@
     "hot wheels treasure hunt",
     "hot wheels zamac",
     "hot wheels liberty walk",
-    "hot wheels nissan",
     "hot wheels porsche",
     "hot wheels ferrari",
-    "hot wheels lamborghini",
-    "hot wheels mclaren",
-    "hot wheels honda",
-    "hot wheels mazda",
-    "hot wheels toyota",
-    "hot wheels subaru",
-    "hot wheels mitsubishi",
-    "hot wheels alfa romeo",
-    "hot wheels koenigsegg",
-    "hot wheels pagani",
-    "hot wheels aston martin",
-    "hot wheels maserati",
-    "hot wheels shelby",
-    "hot wheels dodge",
-    "hot wheels chevrolet",
-    "hot wheels ford mustang"
+    "hot wheels nissan"
   ],
   "log_file": "hotwheels_alerts.log"
 }

@@ -18,18 +18,16 @@ from pathlib import Path
 from typing import Optional
 
 import requests
-from curl_cffi import requests as cffi_requests
 from bs4 import BeautifulSoup
 
 CONFIG_PATH = Path(__file__).parent / "config.json"
 SEEN_FILE = Path(__file__).parent / "seen_deals.json"
 
-IMPERSONATE_LIST = ["chrome120", "chrome110", "chrome107", "safari15_5", "edge99"]
-
-HEADERS_LIST = [
+BROWSER_HEADERS = [
     {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
         "Accept-Language": "en-IN,en;q=0.9",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
         "Accept-Encoding": "gzip, deflate, br",
         "Connection": "keep-alive",
         "Upgrade-Insecure-Requests": "1",
@@ -40,8 +38,9 @@ HEADERS_LIST = [
         "Cache-Control": "max-age=0",
     },
     {
-        "Accept-Language": "en-IN,en;q=0.9",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-IN,en;q=0.9",
         "Accept-Encoding": "gzip, deflate, br",
         "Connection": "keep-alive",
         "Upgrade-Insecure-Requests": "1",
@@ -50,7 +49,21 @@ HEADERS_LIST = [
         "Sec-Fetch-Site": "same-origin",
         "Cache-Control": "max-age=0",
     },
+    {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:133.0) Gecko/20100101 Firefox/133.0",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-IN,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Cache-Control": "max-age=0",
+    },
 ]
+
+amazon_session = requests.Session()
 
 EXCLUDED_KEYWORDS_AMAZON = ["matchbox", "majorette", "tomica", "hot wheels id", "disney",
                             "marvel", "star wars", "f1", "formula 1", "red bull f1",
@@ -139,19 +152,26 @@ def send_telegram(token: str, chat_id: str, message: str):
     except Exception as e:
         logging.error(f"Telegram error: {e}")
 
-# --- Amazon India Scraper ---------------------------------------------------
+def warm_up_session():
+    """Visit Amazon homepage to get cookies and establish session."""
+    try:
+        headers = random.choice(BROWSER_HEADERS).copy()
+        r = amazon_session.get("https://www.amazon.in/", headers=headers, timeout=15)
+        logging.info(f"Session warm-up: {r.status_code}")
+        time.sleep(random.uniform(3, 6))
+    except Exception as e:
+        logging.warning(f"Warm-up failed: {e}")
 
 def amazon_get(url: str, retries: int = 5) -> Optional[str]:
-    """Fetch Amazon page with rotating TLS impersonation and CAPTCHA handling."""
+    """Fetch Amazon page with session cookies and rotating headers."""
     for attempt in range(retries):
-        impersonate = random.choice(IMPERSONATE_LIST)
-        headers = random.choice(HEADERS_LIST).copy()
+        headers = random.choice(BROWSER_HEADERS).copy()
+        headers["Referer"] = "https://www.amazon.in/"
         try:
-            session = cffi_requests.Session(impersonate=impersonate)
-            r = session.get(url, headers=headers, timeout=30, allow_redirects=True)
+            r = amazon_session.get(url, headers=headers, timeout=30, allow_redirects=True)
             if r.status_code in (503, 429):
                 wait = (2 ** attempt) * random.uniform(10, 20)
-                logging.warning(f"    {r.status_code} ({impersonate}), waiting {wait:.0f}s")
+                logging.warning(f"    {r.status_code}, waiting {wait:.0f}s (attempt {attempt+1}/{retries})")
                 time.sleep(wait)
                 continue
             if r.status_code != 200:
@@ -167,9 +187,9 @@ def amazon_get(url: str, retries: int = 5) -> Optional[str]:
                 or "are you a robot" in body_lower
                 or "sorry, we just need to make sure" in body_lower
             )
-            has_product = "#producttitle" in body_lower or "producttitle" in body_lower
+            has_product = "producttitle" in body_lower
             if is_captcha and not has_product:
-                logging.warning(f"    CAPTCHA ({impersonate}), waiting {30 + attempt * 10}s")
+                logging.warning(f"    CAPTCHA, waiting {30 + attempt * 10}s")
                 time.sleep(30 + attempt * 10)
                 continue
             if len(body) < 3000 and not has_product:
@@ -185,7 +205,6 @@ def amazon_get(url: str, retries: int = 5) -> Optional[str]:
     return None
 
 def extract_prices_from_html(html: str) -> list:
-    """Extract all prices from Amazon HTML using regex."""
     prices = []
     for m in re.finditer(r'class="a-offscreen"[^>]*>\s*(?:Rs\.?|[\u20b9])\s*([\d,]+(?:\.\d{2})?)', html):
         try:
@@ -216,7 +235,7 @@ def search_amazon_hotwheels(config: dict, seen: dict) -> list:
         logging.info(f"  Amazon search ({i+1}/{len(queries)}): {query}")
         html = amazon_get(search_url)
         if not html:
-            time.sleep(random.uniform(5, 10))
+            time.sleep(random.uniform(10, 20))
             continue
 
         soup = BeautifulSoup(html, "html.parser")
@@ -381,7 +400,7 @@ def check_amazon_products(config: dict, seen: dict) -> list:
                     "reason": deal_reason,
                 })
 
-        time.sleep(random.uniform(5, 10))
+        time.sleep(random.uniform(15, 25))
 
     return alerts
 
@@ -706,6 +725,8 @@ def main():
     logging.info(f"Interval: {config.get('check_interval_minutes', 5)} min")
     logging.info(f"Amazon products: {len(config.get('amazon_products', []))}")
     logging.info("=" * 60)
+
+    warm_up_session()
 
     seen = load_seen()
     interval = config.get("check_interval_minutes", 5) * 60
