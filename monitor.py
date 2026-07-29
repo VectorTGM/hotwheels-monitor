@@ -192,10 +192,6 @@ def amazon_get(url: str, retries: int = 5) -> Optional[str]:
                 logging.warning(f"    CAPTCHA, waiting {30 + attempt * 10}s")
                 time.sleep(30 + attempt * 10)
                 continue
-            if len(body) < 3000 and not has_product:
-                logging.warning(f"    Short page ({len(body)} chars), retrying...")
-                time.sleep(random.uniform(10, 20))
-                continue
             return body
         except Exception as e:
             if attempt < retries - 1:
@@ -233,13 +229,18 @@ def search_amazon_hotwheels(config: dict, seen: dict) -> list:
     for i, query in enumerate(queries):
         search_url = f"https://www.amazon.in/s?k={requests.utils.quote(query)}"
         logging.info(f"  Amazon search ({i+1}/{len(queries)}): {query}")
-        html = amazon_get(search_url)
+        html = amazon_get(search_url, retries=2)
         if not html:
             time.sleep(random.uniform(10, 20))
             continue
 
         soup = BeautifulSoup(html, "html.parser")
         cards = soup.select('[data-asin]:not([data-asin=""])')
+
+        if not cards:
+            logging.info(f"    No products found (page may be blocked)")
+            time.sleep(random.uniform(20, 35))
+            continue
 
         found_any = False
         for card in cards[:5]:
